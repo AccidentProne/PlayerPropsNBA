@@ -5,9 +5,8 @@ from colorama import Fore
 
 colorama.init(autoreset=True)
 
+sport = 'basketball_nba'
 apiKey = '16fdd193e7949e0ca1aced839093368b'
-sport = 'basketball_nba'  # https://the-odds-api.com/liveapi/guides/v4/#overview
-market = 'player_points'  # https://the-odds-api.com/sports-odds-data/betting-markets.html
 
 def initialize_database():
     conn = sqlite3.connect('NBA.db')
@@ -54,7 +53,6 @@ def fetch_event_data():
         print(Fore.RED + f"Failed to retrieve data. Status code: {response.status_code}")
 
 def fetch_odds_for_selected_events():
-
     conn = sqlite3.connect('NBA.db')
     cursor = conn.cursor()
 
@@ -91,7 +89,7 @@ def fetch_odds_for_selected_events():
     print()
 
     for event_id in selected_events:
-        url = f"https://api.the-odds-api.com/v4/sports/{sport}/events/{event_id}/odds?apiKey={apiKey}&regions=us&markets={market}&dateFormat=iso&oddsFormat=decimal&bookMakers=betmgm,draftkings,fanduel"
+        url = f"https://api.the-odds-api.com/v4/sports/{sport}/events/{event_id}/odds?apiKey={apiKey}&regions=us&markets=player_points&dateFormat=iso&oddsFormat=decimal&bookMakers=betmgm,draftkings,fanduel"
         response = requests.get(url)
 
         if response.status_code == 200:
@@ -113,7 +111,7 @@ def fetch_odds_for_selected_events():
                         if bookmaker['key'] in ['betmgm', 'draftkings', 'fanduel']:
                             if 'markets' in bookmaker and isinstance(bookmaker['markets'], list):
                                 for market in bookmaker['markets']:
-                                    if market['key'] == market:
+                                    if market['key'] == 'player_points':
                                         for outcome in market['outcomes']:
                                             player = outcome['description']
                                             points = outcome['point']
