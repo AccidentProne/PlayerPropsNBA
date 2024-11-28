@@ -1,7 +1,3 @@
-Here is a README file for your NBA odds script:
-
----
-
 # NBA Odds Script
 
 This script fetches NBA game data and player odds from various sportsbooks (BetMGM, DraftKings, FanDuel) and stores the information in an SQLite database. It provides an interactive command-line interface that allows users to choose specific events for which they want to retrieve player odds.
