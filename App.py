@@ -5,8 +5,8 @@ from colorama import Fore
 
 colorama.init(autoreset=True)
 
-sport = 'basketball_nba'
 apiKey = '16fdd193e7949e0ca1aced839093368b'
+# https://the-odds-api.com/liveapi/guides/v4/
 
 def initialize_database():
     conn = sqlite3.connect('NBA.db')
@@ -31,7 +31,7 @@ def initialize_database():
     conn.close()
 
 def fetch_event_data():
-    url = f"https://api.the-odds-api.com/v4/sports/{sport}/events?apiKey={apiKey}"
+    url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey={apiKey}"
     response = requests.get(url)
 
     if response.status_code == 200:
@@ -89,7 +89,7 @@ def fetch_odds_for_selected_events():
     print()
 
     for event_id in selected_events:
-        url = f"https://api.the-odds-api.com/v4/sports/{sport}/events/{event_id}/odds?apiKey={apiKey}&regions=us&markets=player_points&dateFormat=iso&oddsFormat=decimal&bookMakers=betmgm,draftkings,fanduel"
+        url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events/{event_id}/odds?apiKey={apiKey}&regions=us&markets=player_points&dateFormat=iso&oddsFormat=decimal&bookMakers=betmgm,draftkings,fanduel"
         response = requests.get(url)
 
         if response.status_code == 200:
