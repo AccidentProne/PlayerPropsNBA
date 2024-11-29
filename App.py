@@ -1,69 +1,47 @@
 import requests
-import sqlite3
 import colorama
 from colorama import Fore
+import gspread
+from google.oauth2.service_account import Credentials
+import warnings
+from gspread_formatting import *
+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 colorama.init(autoreset=True)
 
 apiKey = '16fdd193e7949e0ca1aced839093368b'
-# https://the-odds-api.com/liveapi/guides/v4/
+SERVICE_ACCOUNT_FILE = '/Users/tylergilbert/Downloads/playerpropsnba-f0ce0b354a12.json'
+SPREADSHEET_ID = '1SmS5Piiiyea6rFyj4fqiSwg9s0Bi6FYAzbNqASI4GYQ'
+WORKSHEET_NAME = 'Sheet1'
 
-def initialize_database():
-    conn = sqlite3.connect('NBA.db')
-    cursor = conn.cursor()
+SCOPE = ['https://www.googleapis.com/auth/spreadsheets']
+credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPE)
+client = gspread.authorize(credentials)
+sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_NAME)
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS Events (
-        id TEXT PRIMARY KEY,
-        home_team TEXT,
-        away_team TEXT
-    )""")
-
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS Odds (
-        player TEXT,
-        betmgm REAL,
-        draftkings REAL,
-        fanduel REAL
-    )""")
-
-    conn.commit()
-    conn.close()
+def clear_sheet():
+    sheet.clear()
 
 def fetch_event_data():
     url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey={apiKey}"
     response = requests.get(url)
 
     if response.status_code == 200:
-        events_data = response.json()
-
-        conn = sqlite3.connect('NBA.db')
-        cursor = conn.cursor()
-
-        cursor.execute("DELETE FROM Events")
-
-        for event in events_data:
-            cursor.execute("INSERT INTO Events (id, home_team, away_team) VALUES (?, ?, ?)",
-                           (event['id'], event['home_team'], event['away_team']))
-
-        conn.commit()
-        conn.close()
-        print(Fore.GREEN + "Event data has been successfully imported into the database.")
+        return response.json()
     else:
-        print(Fore.RED + f"Failed to retrieve data. Status code: {response.status_code}")
+        print(Fore.RED + f"Failed to retrieve event data. Status code: {response.status_code}")
+        return []
 
 def fetch_odds_for_selected_events():
-    conn = sqlite3.connect('NBA.db')
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT id, home_team, away_team FROM Events")
-    events_data = cursor.fetchall()
+    events = fetch_event_data()
+    if not events:
+        print(Fore.YELLOW + "No events available.")
+        return
 
     print()
-    for i, event in enumerate(events_data, start=1):
-        event_id, home_team, away_team = event
-        event_num = f"{i:2}"
-        print(f"{event_num}. Event ID: {event_id} | Home Team: {home_team} | Away Team: {away_team}")
+    for i, event in enumerate(events, start=1):
+        print(f"{i:2}. Event ID: {event['id']} | Home Team: {event['home_team']} | Away Team: {event['away_team']}")
 
     print("\nEnter the numbers of the events you want to process (comma separated).")
     print("Enter 'all' to process all events.")
@@ -72,81 +50,62 @@ def fetch_odds_for_selected_events():
 
     if user_input.lower() == 'quit':
         print(Fore.YELLOW + "Exiting the program...")
-        conn.close()
         exit()
 
     if user_input.lower() == 'all':
-        selected_events = [event[0] for event in events_data]
+        selected_events = [event['id'] for event in events]
     else:
         try:
             selected_event_indices = [int(x.strip()) - 1 for x in user_input.split(',')]
-            selected_events = [events_data[i][0] for i in selected_event_indices]
+            selected_events = [events[i]['id'] for i in selected_event_indices]
         except ValueError:
             print(Fore.RED + "Invalid input. Please enter a valid selection.")
-            conn.close()
             exit()
 
     print()
 
+    odds_rows = [["Player", "BetMGM", "DraftKings", "FanDuel"]]
+
     for event_id in selected_events:
-        url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events/{event_id}/odds?apiKey={apiKey}&regions=us&markets=player_points&dateFormat=iso&oddsFormat=decimal&bookMakers=betmgm,draftkings,fanduel"
+        url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events/{event_id}/odds?apiKey={apiKey}&regions=us&markets=player_points&dateFormat=iso&oddsFormat=decimal&bookmakers=betmgm,draftkings,fanduel"
         response = requests.get(url)
 
         if response.status_code == 200:
-            events_data = response.json()
+            event_data = response.json()
+            if 'bookmakers' in event_data:
+                player_odds = {}
 
-            player_odds = {}
+                for bookmaker in event_data['bookmakers']:
+                    if bookmaker['key'] in ['betmgm', 'draftkings', 'fanduel']:
+                        for market in bookmaker.get('markets', []):
+                            if market['key'] == 'player_points':
+                                for outcome in market['outcomes']:
+                                    player = outcome['description']
+                                    points = outcome['point']
 
-            if isinstance(events_data, dict):
-                if not events_data.get('bookmakers'):
-                    if 'home_team' in events_data and 'away_team' in events_data:
-                        print(Fore.YELLOW + f"No bookmakers data for {events_data['home_team']} vs {events_data['away_team']}")
+                                    if player not in player_odds:
+                                        player_odds[player] = {'betmgm': None, 'draftkings': None, 'fanduel': None}
 
-                else:
-                    home_team = events_data.get('home_team', 'Unknown Home Team')
-                    away_team = events_data.get('away_team', 'Unknown Away Team')
-                    print(Fore.GREEN + f"Processing odds for {home_team} vs {away_team} (Event ID: {event_id})")
+                                    player_odds[player][bookmaker['key']] = points
 
-                    for bookmaker in events_data['bookmakers']:
-                        if bookmaker['key'] in ['betmgm', 'draftkings', 'fanduel']:
-                            if 'markets' in bookmaker and isinstance(bookmaker['markets'], list):
-                                for market in bookmaker['markets']:
-                                    if market['key'] == 'player_points':
-                                        for outcome in market['outcomes']:
-                                            player = outcome['description']
-                                            points = outcome['point']
-                                            odds = outcome['price']
-
-                                            if player not in player_odds:
-                                                player_odds[player] = {'betmgm': None, 'draftkings': None, 'fanduel': None}
-
-                                            if bookmaker['key'] == 'betmgm':
-                                                player_odds[player]['betmgm'] = points
-                                            elif bookmaker['key'] == 'draftkings':
-                                                player_odds[player]['draftkings'] = points
-                                            elif bookmaker['key'] == 'fanduel':
-                                                player_odds[player]['fanduel'] = points
-
-            for player, odds in player_odds.items():
-                cursor.execute("""
-                INSERT INTO Odds (Player, betmgm, draftkings, fanduel)
-                VALUES (?, ?, ?, ?)
-                """, (player,
-                      odds['betmgm'],
-                      odds['draftkings'],
-                      odds['fanduel']))
-
-            conn.commit()
-
+                for player, odds in player_odds.items():
+                    odds_rows.append([
+                        player,
+                        odds['betmgm'] if odds['betmgm'] is not None else 'null',
+                        odds['draftkings'] if odds['draftkings'] is not None else 'null',
+                        odds['fanduel'] if odds['fanduel'] is not None else 'null'
+                    ])
+            else:
+                print(Fore.YELLOW + f"No bookmakers data available for Event ID: {event_id}.")
         else:
-            print(Fore.RED + f"Failed to retrieve data for Event ID: {event_id}. Status code: {response.status_code}")
+            print(Fore.RED + f"Failed to retrieve odds for Event ID: {event_id}. Status code: {response.status_code}")
 
-    conn.close()
-    print(Fore.GREEN + "Odds data has been successfully imported into the database.")
+    clear_sheet()
+    sheet.update(values=odds_rows, range_name='A1')
+    format_cell_range(sheet, 'B2:D' + str(len(odds_rows) + 1), cellFormat(horizontalAlignment='RIGHT'))
+    print(Fore.GREEN + "Odds data has been successfully uploaded to Google Sheets.")
 
 def main():
-    initialize_database()
-    fetch_event_data()
     fetch_odds_for_selected_events()
 
 if __name__ == "__main__":
