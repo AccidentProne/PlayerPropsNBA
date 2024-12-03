@@ -1,159 +1,131 @@
 import requests
-import colorama
-from colorama import Fore
+from colorama import init, Fore
 import gspread
 from google.oauth2.service_account import Credentials
-import warnings
-from gspread_formatting import *
+from gspread_formatting import format_cell_range, CellFormat, TextFormat
 
-# Suppress warnings for deprecated features
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+# Initialize colorama for color-coded console output
+init(autoreset=True)
 
-# Initialize colorama for colored output
-colorama.init(autoreset=True)
+# API key for the Odds API
+API_KEY = '16fdd193e7949e0ca1aced839093368b'
+# Path to Google service account credentials file
+SERVICE_ACCOUNT_FILE = 'C:/Users/tyler/playerpropsnba-64aafb0d30ae.json'
+# Google Sheets spreadsheet ID and worksheet name
+SPREADSHEET_ID = '1tP6jNJnNwv5LWDtOp9AwfL5ZljYQRRqDc_kMKVYNevA'
+WORKSHEET_NAME = 'nba_odds'
 
-# API Key for the Odds API
-apiKey = '16fdd193e7949e0ca1aced839093368b'
-
-# Google Sheets credentials and details
-SERVICE_ACCOUNT_FILE = 'C:/Users/tyler/playerpropsnba-64aafb0d30ae.json'  # Path to your service account credentials file
-SPREADSHEET_ID = '1tP6jNJnNwv5LWDtOp9AwfL5ZljYQRRqDc_kMKVYNevA'  # Google Sheets ID
-WORKSHEET_NAME = 'Lines Import'  # Worksheet name where data will be uploaded
-
-# Google Sheets API scope and authentication
+# Scope for Google Sheets API
 SCOPE = ['https://www.googleapis.com/auth/spreadsheets']
+# Authenticate and connect to Google Sheets
 credentials = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPE)
 client = gspread.authorize(credentials)
 sheet = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_NAME)
 
-# Function to clear the worksheet before uploading new data
+# Clears all data in the Google Sheet
 def clear_sheet():
     sheet.clear()
 
-# Function to fetch event data from the Odds API
+# Fetches NBA event data from the Odds API
 def fetch_event_data():
-    # URL to get NBA events for today
-    url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey={apiKey}"
+    url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events?apiKey={API_KEY}"
     response = requests.get(url)
-
     if response.status_code == 200:
-        return response.json()  # Return event data in JSON format
-    else:
-        print(Fore.RED + f"Failed to retrieve event data. Status code: {response.status_code}")
-        return []  # Return an empty list if there is an error
+        return response.json()  # Return event data as JSON if request is successful
+    print(Fore.RED + f"Failed to retrieve event data. Status code: {response.status_code}")
+    return []  # Return empty list on failure
 
-# Function to fetch odds for selected events
+# Fetches and processes odds data for selected events
 def fetch_odds_for_selected_events():
-    # Fetch events data
+    # Get list of events
     events = fetch_event_data()
     if not events:
         print(Fore.YELLOW + "No events available.")
         return
 
-    # Display the list of events to the user
-    print()
+    # Display available events
     for i, event in enumerate(events, start=1):
         print(f"{i:2}. {event['home_team']} vs {event['away_team']}")
 
+    # Prompt the user for event selection
     print("\nEnter the numbers of the events you want to process (comma separated).")
     print("Enter 'all' to process all events.")
     print("Enter 'quit' to quit the program.")
     user_input = input("Selection: ").strip()
 
-    # Exit if user wants to quit
     if user_input.lower() == 'quit':
         print(Fore.YELLOW + "Exiting the program...")
         exit()
 
-    # Select all events if the user types 'all'
+    selected_events = []
     if user_input.lower() == 'all':
+        # Select all events if 'all' is entered
         selected_events = [event['id'] for event in events]
     else:
         try:
-            # Parse user input to select specific events
+            # Parse user input for selected events
             selected_event_indices = [int(x.strip()) - 1 for x in user_input.split(',')]
             selected_events = [events[i]['id'] for i in selected_event_indices]
         except ValueError:
             print(Fore.RED + "Invalid input. Please enter a valid selection.")
             exit()
 
-    print()
-
-    # Prepare a list of headers for the Google Sheet
+    # Initialize rows for Google Sheets with column headers
     odds_rows = [["Player", "BetMGM", "DraftKings", "FanDuel", "PrizePicks", "Underdog"]]
 
-    # Loop through each selected event and fetch odds data
+    # Fetch odds data for each selected event
     for event_id in selected_events:
-        url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events/{event_id}/odds?apiKey={apiKey}&regions=us&markets=player_points&dateFormat=iso&oddsFormat=decimal&bookmakers=betmgm,draftkings,fanduel,prizepicks,underdog"
+        url = f"https://api.the-odds-api.com/v4/sports/basketball_nba/events/{event_id}/odds?apiKey={API_KEY}&regions=us&markets=player_points&dateFormat=iso&oddsFormat=decimal&bookmakers=betmgm,draftkings,fanduel,prizepicks,underdog"
         response = requests.get(url)
-
         if response.status_code == 200:
             event_data = response.json()
             if 'bookmakers' in event_data and event_data['bookmakers']:
-                # Extract event details
-                home_team = event_data.get('home_team', 'Unknown Home Team')
-                away_team = event_data.get('away_team', 'Unknown Away Team')
-                print(Fore.GREEN + f"Odds found for {home_team} vs {away_team}")
-                
-                # Dictionary to hold player odds for each bookmaker
+                # Print event details if odds are available
+                print(Fore.GREEN + f"Odds found for {event_data.get('home_team', 'Unknown Home Team')} vs {event_data.get('away_team', 'Unknown Away Team')}")
+
+                # Process player odds from bookmakers
                 player_odds = {}
-
-                # Loop through each bookmaker and collect player points odds
                 for bookmaker in event_data['bookmakers']:
-                    if bookmaker['key'] in ['betmgm', 'draftkings', 'fanduel', 'prizepicks', 'underdog']:
-                        for market in bookmaker.get('markets', []):
-                            if market['key'] == 'player_points':  # Focus on player points market
-                                for outcome in market['outcomes']:
-                                    player = outcome['description']  # Player name
-                                    points = outcome['point']  # Points value
+                    for market in bookmaker.get('markets', []):
+                        if market['key'] == 'player_points':
+                            for outcome in market['outcomes']:
+                                player = outcome['description']
+                                points = outcome['point']
+                                # Initialize player odds dictionary if not already present
+                                if player not in player_odds:
+                                    player_odds[player] = {'betmgm': None, 'draftkings': None, 'fanduel': None, 'prizepicks': None, 'underdog': None}
+                                # Update odds for the player
+                                player_odds[player][bookmaker['key']] = points
 
-                                    # If the player is not in the dictionary, initialize them
-                                    if player not in player_odds:
-                                        player_odds[player] = {'betmgm': None, 'draftkings': None, 'fanduel': None, 'prizepicks': None, 'underdog': None}
-
-                                    # Store the odds for each bookmaker
-                                    player_odds[player][bookmaker['key']] = points
-
-                # Sort player odds alphabetically by last name
-                sorted_player_odds = sorted(player_odds.items(), key=lambda x: x[0].split()[-1].lower())
-
-                # Add the sorted player odds to the list
-                for player, odds in sorted_player_odds:
+                # Sort and add player odds to the rows
+                for player, odds in sorted(player_odds.items()):
                     odds_rows.append([
                         player,
-                        odds['betmgm'] if odds['betmgm'] is not None else 'null',
-                        odds['draftkings'] if odds['draftkings'] is not None else 'null',
-                        odds['fanduel'] if odds['fanduel'] is not None else 'null',
-                        odds['prizepicks'] if odds['prizepicks'] is not None else 'null',
-                        odds['underdog'] if odds['underdog'] is not None else 'null'
+                        odds['betmgm'] or 'null',
+                        odds['draftkings'] or 'null',
+                        odds['fanduel'] or 'null',
+                        odds['prizepicks'] or 'null',
+                        odds['underdog'] or 'null'
                     ])
             else:
-                # If no odds found, notify the user
-                home_team = event_data.get('home_team', 'Unknown Home Team')
-                away_team = event_data.get('away_team', 'Unknown Away Team')
-                print(Fore.YELLOW + f"No odds available for {home_team} vs {away_team}.")
+                print(Fore.YELLOW + f"No odds available for {event_data.get('home_team', 'Unknown Home Team')} vs {event_data.get('away_team', 'Unknown Away Team')}.")
         else:
-            # Handle failed API call
             print(Fore.RED + f"Failed to retrieve odds for Event ID: {event_id}. Status code: {response.status_code}")
 
-    # If there are any odds rows to upload, clear the sheet and update it
     if odds_rows:
+        # Clear the Google Sheet and update it with new odds data
         clear_sheet()
         sheet.update(values=odds_rows, range_name='A1')
-        format_cell_range(sheet, 'B2:F' + str(len(odds_rows) + 1), CellFormat(horizontalAlignment='RIGHT'))
-
-        # Format header row to be bold
-        header_format = CellFormat(textFormat=TextFormat(bold=True))
-        format_cell_range(sheet, 'A1:F1', header_format)
-
+        format_cell_range(sheet, f'B2:F{len(odds_rows)}', CellFormat(horizontalAlignment='RIGHT'))
+        format_cell_range(sheet, 'A1:F1', CellFormat(textFormat=TextFormat(bold=True)))
         print(Fore.GREEN + "\nOdds data has been successfully uploaded to Google Sheets.")
     else:
         print(Fore.YELLOW + "No odds data was found for the selected events.")
 
-# Main entry point of the script
+# Main function to start the program
 def main():
     fetch_odds_for_selected_events()
 
-# Run the script when executed
+# Entry point for the program
 if __name__ == "__main__":
     main()
