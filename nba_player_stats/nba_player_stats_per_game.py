@@ -23,6 +23,9 @@ def remove_special_characters(name):
         return "Moe Wagner"
     if name == "Nic Claxton":
         return "Nicolas Claxton"
+    if name == "Alex Sarr":
+        return "Alexandre Sarr"
+
     return ''.join(
         c for c in unicodedata.normalize('NFD', name)
         if unicodedata.category(c) != 'Mn'
