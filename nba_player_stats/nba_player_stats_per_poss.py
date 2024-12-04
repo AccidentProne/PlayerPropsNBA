@@ -19,15 +19,22 @@ sheet_player_stats = client.open_by_key(SPREADSHEET_ID).worksheet(WORKSHEET_NAME
 def clear_sheet(sheet):
     sheet.clear()
 
-# Standardize player names by removing special characters and handling exceptions
+# Standardizes player names by removing special characters and handling exceptions
 def remove_special_characters(name):
+    # Handle special exceptions
     if name == "Moritz Wagner":
         return "Moe Wagner"
     if name == "Nic Claxton":
         return "Nicolas Claxton"
     if name == "Alex Sarr":
         return "Alexandre Sarr"
-    
+    if name in ["Derrick Jones Jr.", "Derrick Jones Jr", "Derrick Jones"]:
+        return "Derrick Jones Jr"
+    if name == "AJ Green":
+        return "A. J. Green"
+    if name == "Andre Jackson Jr":
+        return "Andre Jackson Jr."
+
     return ''.join(
         c for c in unicodedata.normalize('NFD', name)
         if unicodedata.category(c) != 'Mn'
