@@ -71,7 +71,7 @@ def fetch_odds_for_selected_events():
             exit()
 
     # Initialize rows for Google Sheets with column headers
-    odds_rows = [["Player", "BetMGM", "DraftKings", "FanDuel", "PrizePicks", "Underdog"]]
+    odds_rows = [["Player", "BetMGM", "DraftKings", "FanDuel", "PrizePicks", "Underdog", "Home Team", "Away Team"]]
 
     # Fetch odds data for each selected event
     for event_id in selected_events:
@@ -80,8 +80,10 @@ def fetch_odds_for_selected_events():
         if response.status_code == 200:
             event_data = response.json()
             if 'bookmakers' in event_data and event_data['bookmakers']:
-                # Print event details if odds are available
-                print(Fore.GREEN + f"Odds found for {event_data.get('home_team', 'Unknown Home Team')} vs {event_data.get('away_team', 'Unknown Away Team')}")
+                # Extract event details
+                home_team = event_data.get('home_team', 'Unknown Home Team')
+                away_team = event_data.get('away_team', 'Unknown Away Team')
+                print(Fore.GREEN + f"Odds found for {home_team} vs {away_team}")
 
                 # Process player odds from bookmakers
                 player_odds = {}
@@ -105,7 +107,9 @@ def fetch_odds_for_selected_events():
                         odds['draftkings'] or 'null',
                         odds['fanduel'] or 'null',
                         odds['prizepicks'] or 'null',
-                        odds['underdog'] or 'null'
+                        odds['underdog'] or 'null',
+                        home_team,
+                        away_team
                     ])
             else:
                 print(Fore.YELLOW + f"No odds available for {event_data.get('home_team', 'Unknown Home Team')} vs {event_data.get('away_team', 'Unknown Away Team')}.")
@@ -116,9 +120,9 @@ def fetch_odds_for_selected_events():
         # Clear the Google Sheet and update it with new odds data
         clear_sheet()
         sheet.update(values=odds_rows, range_name='A1')
-        format_cell_range(sheet, f'B2:F{len(odds_rows)}', CellFormat(horizontalAlignment='RIGHT'))
-        format_cell_range(sheet, 'A1:F1', CellFormat(textFormat=TextFormat(bold=True)))
-        print(Fore.GREEN + "\nOdds data has been successfully uploaded to Google Sheets.")
+        format_cell_range(sheet, f'B2:I{len(odds_rows)}', CellFormat(horizontalAlignment='RIGHT'))
+        format_cell_range(sheet, 'A1:I1', CellFormat(textFormat=TextFormat(bold=True)))
+        print(Fore.GREEN + "Odds data has been successfully uploaded to Google Sheets.")
     else:
         print(Fore.YELLOW + "No odds data was found for the selected events.")
 

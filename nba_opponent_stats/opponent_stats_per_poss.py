@@ -78,7 +78,7 @@ def upload_opponent_stats_to_sheet():
     # Format numerical data columns to be right-aligned
     format_cell_range(sheet_opponent_stats, f'B2:Z{len(stats_rows)}', CellFormat(horizontalAlignment='RIGHT'))
 
-    print(f"Team Opponent stats have been successfully uploaded to 'opponent_stats_per_pos' sheet.'")
+    print(f"Team Opponent stats have been successfully uploaded to 'opponent_stats_per_pos' sheet.\n'")
 
 # Entry point for the script
 def main():
